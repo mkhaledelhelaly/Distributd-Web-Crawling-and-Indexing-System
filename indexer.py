@@ -1,6 +1,5 @@
 import os
 import json
-import psycopg2
 from collections import Counter
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
@@ -16,10 +15,6 @@ import time
 # ---------- Configuration ----------
 REDIS_HOST = '10.212.0.2'
 REDIS_PORT = 6379
-DB_HOST = '10.212.0.9'
-DB_NAME = 'searchengine'
-DB_USER = 'crawleruser'
-DB_PASSWORD = 'securepassword'
 GCS_BUCKET_NAME = 'my-index-bucket'
 BASE_INDEX_DIR = 'indexdir'
 
@@ -121,31 +116,6 @@ def index_content(page_data):
         writer.update_document(url=url, title=title, content=content)
         writer.commit()
         print(f"[Indexer Node] ✅ Whoosh indexed to {local_index_path}")
-
-        # ---------- PostgreSQL Insert ----------
-        words = content.lower().split()
-        filtered_words = [word for word in words if word not in STOP_WORDS]
-        freq_dict = dict(Counter(filtered_words))
-        freq_json = json.dumps(freq_dict)
-
-        try:
-            conn = psycopg2.connect(
-                host=DB_HOST, database=DB_NAME,
-                user=DB_USER, password=DB_PASSWORD
-            )
-            cursor = conn.cursor()
-            insert_query = """
-                INSERT INTO pages (url, title, content, keywords)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (url) DO NOTHING;
-            """
-            cursor.execute(insert_query, (url, title, content, freq_json))
-            conn.commit()
-            cursor.close()
-            conn.close()
-            print(f"[Indexer Node] ✅ Inserted into PostgreSQL: {url}")
-        except Exception as db_err:
-            print(f"[Indexer Node] ❌ DB insert failed: {db_err}")
 
         # ---------- GCS Upload ----------
         try:
